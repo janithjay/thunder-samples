@@ -1,0 +1,109 @@
+name: 👷🛠️ PR Builder
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  merge_group:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "lts/*"
+
+jobs:
+  dependency-review:
+    name: 🔎 Dependency Review
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: 🔎 Dependency Review
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4
+        with:
+          fail-on-severity: high
+          deny-licenses: GPL-3.0-only,GPL-3.0-or-later,AGPL-3.0-only,AGPL-3.0-or-later
+          comment-summary-in-pr: always
+          base-ref: ${{ github.event.pull_request.base.sha }}
+          head-ref: ${{ github.event.pull_request.head.sha }}
+
+  discover:
+    name: 🔍 Discover Samples
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      samples: ${{ steps.find.outputs.samples }}
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      # Every <category>/<sample>/ directory with a package.json is a sample.
+      - name: 🔍 Find Samples
+        id: find
+        run: |
+          samples=$(find . -mindepth 3 -maxdepth 3 -name package.json -not -path "./.*" -not -path "*/node_modules/*" \
+            -exec dirname {} \; | sed 's|^\./||' | sort | jq -R . | jq -cs .)
+          echo "samples=$samples" >> "$GITHUB_OUTPUT"
+          echo "Samples: $samples"
+
+  build-lint:
+    name: 🔨 Build & Lint (${{ matrix.sample }})
+    needs: discover
+    if: ${{ needs.discover.outputs.samples != '[]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: ${{ fromJson(needs.discover.outputs.samples) }}
+    defaults:
+      run:
+        working-directory: ${{ matrix.sample }}
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: ⚙️ Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: 📦 Set up pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        with:
+          version: latest
+          run_install: false
+
+      - name: 🗄️ Cache pnpm store
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: ${{ runner.os }}-pnpm-${{ matrix.sample }}-${{ hashFiles(format('{0}/pnpm-lock.yaml', matrix.sample)) }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-${{ matrix.sample }}-
+
+      - name: 📦 Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: 🔍 Security Audit
+        run: pnpm audit --audit-level=high
+
+      - name: 🎨 Check Formatting
+        run: pnpm format:check
+
+      - name: 🧹 Lint
+        run: pnpm lint
+
+      - name: 🔨 Build
+        run: pnpm build

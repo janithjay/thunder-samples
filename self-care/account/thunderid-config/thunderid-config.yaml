@@ -1,0 +1,186 @@
+resource_type: user_type
+id: 01a1152b-d1dc-7a3c-bd15-805c08247f87
+category: user
+name: SelfCareUser
+ouHandle: default
+allowSelfRegistration: true
+systemAttributes:
+  display: username
+schema: {
+    "username": {
+      "type": "string",
+      "displayName": "Username",
+      "required": true,
+      "unique": true
+    },
+    "password": {
+      "type": "string",
+      "displayName": "Password",
+      "required": false,
+      "credential": true
+    },
+    "email": {
+      "type": "string",
+      "displayName": "Email",
+      "required": true,
+      "unique": true,
+      "regex": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
+    },
+    "given_name": {
+      "type": "string",
+      "displayName": "First Name",
+      "required": false
+    },
+    "family_name": {
+      "type": "string",
+      "displayName": "Last Name",
+      "required": false
+    },
+    "name": {
+      "type": "string",
+      "displayName": "Full Name",
+      "required": false
+    },
+    "mobile_number": {
+      "type": "string",
+      "displayName": "Mobile Number",
+      "required": false
+    }
+  }
+
+---
+resource_type: flow
+id: 01a1152b-d1de-7f0f-a4cd-cdc9092c78a9
+name: Self-Care Account Sample Sign Out Flow
+handle: self-care-account-sample-signout-flow
+flowType: SIGNOUT
+nodes:
+- id: start
+  type: START
+  onSuccess: prompt_confirm
+- id: prompt_confirm
+  type: PROMPT
+  meta:
+    components:
+    - type: TEXT
+      id: text_signout_title
+      label: '{{ t(signout:forms.confirm.title) }}'
+      variant: HEADING_1
+    - type: TEXT
+      id: text_signout_desc
+      label: '{{ t(signout:forms.confirm.description) }}'
+      variant: BODY_1
+    - type: BLOCK
+      id: block_signout
+      components:
+      - type: ACTION
+        id: action_confirm
+        label: '{{ t(signout:forms.confirm.actions.submit.label) }}'
+        variant: PRIMARY
+        eventType: SUBMIT
+  prompts:
+  - action:
+      ref: action_confirm
+      nextNode: session_signout
+- id: session_signout
+  type: TASK_EXECUTION
+  executor:
+    name: SessionSignOutExecutor
+  onSuccess: end
+- id: end
+  type: END
+
+---
+resource_type: application
+id: 01a1152b-d1e0-74ed-a999-c3cb93256680
+ouHandle: default
+name: Self-Care Account Sample
+description: Sample React application showcasing the ThunderID React SDK self-care components
+type: browser
+url: http://localhost:5173
+logoUrl: emoji:🙋
+tosUri: http://localhost:5173/terms
+policyUri: http://localhost:5173/privacy
+contacts:
+  - admin@example.com
+authFlowHandle: default-flow
+isRegistrationFlowEnabled: true
+registrationFlowHandle: default-flow
+isRecoveryFlowEnabled: false
+signOutFlowHandle: self-care-account-sample-signout-flow
+isSignOutFlowEnabled: true
+assertion:
+  validityPeriod: 3600
+loginConsent:
+  validityPeriod: 0
+allowedUserTypes:
+  - SelfCareUser
+inboundAuthConfig:
+  - type: oauth2
+    config:
+      clientId: {{.SELF_CARE_ACCOUNT_SAMPLE_CLIENT_ID}}
+      redirectUris:
+        {{- range .SELF_CARE_ACCOUNT_SAMPLE_REDIRECT_URIS}}
+        - {{.}}
+        {{- end}}
+      postLogoutRedirectUris:
+        {{- range .SELF_CARE_ACCOUNT_SAMPLE_POST_LOGOUT_REDIRECT_URIS}}
+        - {{.}}
+        {{- end}}
+      grantTypes:
+        - authorization_code
+      responseTypes:
+        - code
+      tokenEndpointAuthMethod: none
+      pkceRequired: true
+      publicClient: true
+      requirePushedAuthorizationRequests: false
+      token:
+        accessToken:
+          userConfig:
+            validityPeriod: 3600
+            attributes:
+              - given_name
+              - family_name
+              - email
+              - groups
+              - name
+        idToken:
+          validityPeriod: 3600
+          userAttributes:
+            - given_name
+            - family_name
+            - email
+            - groups
+            - name
+          responseType: JWT
+      userInfo:
+        responseType: JSON
+        userAttributes:
+          - given_name
+          - family_name
+          - email
+          - groups
+          - name
+      scopeClaims:
+        email:
+          - email
+          - email_verified
+        group:
+          - groups
+        phone:
+          - phone_number
+          - phone_number_verified
+        profile:
+          - name
+          - given_name
+          - family_name
+          - picture
+
+---
+resource_type: server_config
+name: cors
+value:
+  allowedOrigins:
+    - "http://localhost:5173"
+    - "https://localhost:5173"

@@ -1,8 +1,12 @@
 import {
   CredentialConstants,
+  describeUserAgent,
   evaluateChangePasswordForm,
+  getMeSessions,
   mapCredentialUpdateError,
   resolveChangeCredentialPolicy,
+  revokeMeSession,
+  revokeMeSessions,
   supportsCredential,
   updateMeCredentials,
 } from '@thunderid/browser'
@@ -19,12 +23,12 @@ const ICON_CHEVRON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none
 const TABS = [
   { id: 'home', label: 'Home', icon: ICON_HOME },
   { id: 'personal', label: 'Personal info', icon: ICON_PERSON },
-  { id: 'security', label: 'Security', icon: ICON_SHIELD },
+  { id: 'security', label: 'Login and Security', icon: ICON_SHIELD },
 ]
 
 const TILES = [
   { id: 'personal', icon: ICON_PERSON, tone: 'blue', title: 'Personal info', description: 'Name, email, phone, and profile photo' },
-  { id: 'security', icon: ICON_SHIELD, tone: 'green', title: 'Security', description: 'Password and other credentials' },
+  { id: 'security', icon: ICON_SHIELD, tone: 'green', title: 'Login and Security', description: 'Credentials and active sessions' },
 ]
 
 // Mirrors the React/Vue quickstarts' Security tab: one credential per row.
@@ -127,13 +131,108 @@ function renderCredentialForm(credential, schema) {
   return `<div class="account-security-card-form">${body}</div>`
 }
 
+// The session waiting for its revoke to be confirmed is its id, or this for revoking every other one.
+const ALL_OTHERS = 'all-others'
+
+// Names a session the way the React/Vue `ActiveSessions` component does: "Chrome on macOS". A mobile
+// SDK's session names no browser, so the application stands in for it and the device for the
+// operating system: "Quickstart on Redmi Note 8 Pro".
+function describeSession(session) {
+  const { browser, device, os } = describeUserAgent(session.userAgent)
+  const client = browser ?? session.participants[0]?.appName
+  const place = device ?? os
+
+  if (client && place) return `${client} on ${place}`
+  return client ?? place ?? 'Unknown device'
+}
+
+function formatDateTime(value) {
+  return new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+}
+
+function renderSessionConfirm(message, busy) {
+  return `
+    <div class="account-session-confirm" role="group" aria-label="${escapeHtml(message)}">
+      <p class="account-security-card-desc">${escapeHtml(message)}</p>
+      <div class="account-session-confirm-actions">
+        <button type="button" class="account-session-btn" data-session-cancel>Cancel</button>
+        <button type="button" class="account-session-btn account-session-btn--danger" data-session-confirm ${busy ? 'disabled' : ''}>Revoke</button>
+      </div>
+    </div>`
+}
+
+function renderSession(session, { confirming, busy }) {
+  const name = describeSession(session)
+  const ip = session.lastActiveIp ?? session.creationIp ?? 'Unknown'
+  const apps = session.participants.map((participant) => participant.appName ?? participant.appId).join(', ') || 'Unknown'
+  const revoke = session.isCurrent
+    ? ''
+    : `<button type="button" class="account-security-card-cta" data-session-revoke="${escapeHtml(session.id)}" ${busy ? 'disabled' : ''}>Revoke</button>`
+
+  return `
+    <li class="account-session">
+      <div class="account-security-card-row">
+        <div>
+          <div class="account-security-card-title">
+            ${escapeHtml(name)}
+            ${session.isCurrent ? '<span class="account-session-current">This device</span>' : ''}
+          </div>
+          <div class="account-security-card-desc">IP address ${escapeHtml(ip)} · Last active ${escapeHtml(formatDateTime(session.lastActiveAt))}</div>
+          <div class="account-security-card-desc">Applications: ${escapeHtml(apps)}</div>
+        </div>
+        ${revoke}
+      </div>
+      ${confirming === session.id ? renderSessionConfirm(`Revoke the session on ${name}?`, busy) : ''}
+    </li>`
+}
+
+// Mirrors the React/Vue `ActiveSessions` component: the signed-in user's live SSO sessions, current
+// one first, each other one revocable, and all of them at once.
+function renderSessionsCard({ page, loading, loadError, revokeError, confirming, busy }) {
+  const sessions = [...(page?.sessions ?? [])].sort((a, b) => Number(b.isCurrent) - Number(a.isCurrent))
+  const total = page?.totalResults ?? sessions.length
+  // The current session may be on another page, and the server keeps it when revoking the rest.
+  const canRevokeOthers =
+    sessions.some((session) => !session.isCurrent) &&
+    (sessions.some((session) => session.isCurrent) || total > sessions.length)
+
+  let summary = ''
+  if (total > 1) summary = `${total} active sessions · revoke any you don’t recognize`
+  else if (sessions[0]?.isCurrent) summary = 'This is your only active session'
+
+  let error = ''
+  if (revokeError) error = 'An error occurred while revoking the session. Please try again.'
+  else if (loadError) error = 'An error occurred while loading your sessions. Please try again.'
+
+  let body = ''
+  if (loading && sessions.length === 0) body = '<p class="account-security-card-desc">Loading sessions…</p>'
+  else if (sessions.length === 0 && !error) body = '<p class="account-security-card-desc">No active sessions.</p>'
+  else if (sessions.length > 0) {
+    body = `<ul class="account-sessions-list">${sessions.map((session) => renderSession(session, { confirming, busy })).join('')}</ul>`
+  }
+
+  return `
+    <div class="account-security-card">
+      <div class="account-security-card-row">
+        <div>
+          <div class="account-security-card-title">Active sessions</div>
+          <div class="account-security-card-desc">${escapeHtml(summary)}</div>
+        </div>
+        ${canRevokeOthers ? `<button type="button" class="account-security-card-cta" data-session-revoke="${ALL_OTHERS}" ${busy ? 'disabled' : ''}>Revoke all others</button>` : ''}
+      </div>
+      ${confirming === ALL_OTHERS ? renderSessionConfirm('Revoke all other sessions? You’ll stay signed in here.', busy) : ''}
+      ${error ? `<div class="account-security-card-error account-sessions-error">${escapeHtml(error)}</div>` : ''}
+      ${body}
+    </div>`
+}
+
 function renderSecurityTab({ schema, openAttribute }) {
   const cards = CREDENTIALS.map((credential) => renderCredentialCard(credential, { schema, openAttribute })).join('')
 
   return `
-    <h2 class="account-content-title">Security</h2>
-    <p class="account-content-subtitle">Manage your password and other credentials.</p>
-    <div class="account-security-list">${cards}</div>`
+    <h2 class="account-content-title">Login and Security</h2>
+    <p class="account-content-subtitle">Manage your credentials and active sessions.</p>
+    <div class="account-security-list">${cards}<div data-sessions></div></div>`
 }
 
 function renderPersonalTab(user, { schema, profile }) {
@@ -249,9 +348,68 @@ export async function mountAccountPage(container, { user, auth, initialTab = 'ho
 
   const { schema, profile } = await fetchProfileFormContext({ baseUrl, auth })
 
+  // The sessions card re-renders on its own, so loading or revoking a session never wipes a
+  // half-typed credential form next to it.
+  const sessions = { page: null, loading: false, loadError: false, revokeError: false, confirming: null, busy: false }
+
+  const renderSessions = () => {
+    const sessionsEl = container.querySelector('[data-sessions]')
+    if (!sessionsEl) return
+
+    sessionsEl.innerHTML = renderSessionsCard(sessions)
+
+    sessionsEl.querySelectorAll('[data-session-revoke]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        sessions.confirming = btn.dataset.sessionRevoke
+        renderSessions()
+        sessionsEl.querySelector('[data-session-cancel]')?.focus()
+      })
+    })
+    sessionsEl.querySelector('[data-session-cancel]')?.addEventListener('click', () => {
+      sessions.confirming = null
+      renderSessions()
+    })
+    sessionsEl.querySelector('[data-session-confirm]')?.addEventListener('click', () => revokeSessions(sessions.confirming))
+  }
+
+  const loadSessions = async () => {
+    sessions.loading = true
+    renderSessions()
+
+    try {
+      sessions.page = await getMeSessions({ baseUrl, fetcher: createFetcher(auth) })
+      sessions.loadError = false
+    } catch {
+      sessions.loadError = true
+    }
+
+    sessions.loading = false
+    renderSessions()
+  }
+
+  const revokeSessions = async (target) => {
+    sessions.confirming = null
+    sessions.busy = true
+    sessions.revokeError = false
+    renderSessions()
+
+    try {
+      const fetcher = createFetcher(auth)
+      if (target === ALL_OTHERS) await revokeMeSessions({ baseUrl, exceptCurrent: true, fetcher })
+      else await revokeMeSession({ baseUrl, sessionId: target, fetcher })
+    } catch (err) {
+      // A 404 means the session is already gone, revoked elsewhere or expired, so the reload is enough.
+      sessions.revokeError = err?.statusCode !== 404
+    }
+
+    sessions.busy = false
+    await loadSessions()
+  }
+
   const render = () => {
     container.innerHTML = renderAccountPage({ tab, user: currentUser, schema, profile, openAttribute })
     attachHandlers()
+    renderSessions()
   }
 
   const attachHandlers = () => {
@@ -259,7 +417,9 @@ export async function mountAccountPage(container, { user, auth, initialTab = 'ho
       btn.addEventListener('click', () => {
         tab = btn.dataset.tab
         openAttribute = null
+        sessions.confirming = null
         render()
+        if (tab === 'security') loadSessions()
       })
     })
 
@@ -304,4 +464,5 @@ export async function mountAccountPage(container, { user, auth, initialTab = 'ho
   }
 
   render()
+  if (tab === 'security') loadSessions()
 }

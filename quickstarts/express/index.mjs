@@ -4,10 +4,13 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import {
   thunderID,
+  getMeSessions,
   handleBackchannelLogout,
   handleSignIn,
   handleSignOut,
   protect,
+  revokeMeSession,
+  revokeMeSessions,
   updateMeCredentials,
 } from '@thunderid/express';
 import {verifyBearerToken} from './lib/auth.mjs';
@@ -256,6 +259,45 @@ app.get('/', async (req, res) => {
       ],
       sample: '204 No Content',
     })}
+    ${endpoint({
+      method: 'GET',
+      path: '/api/me/sessions',
+      summary: "Lists the authenticated caller's active SSO sessions.",
+      protectedRoute: true,
+      curl: ['curl http://localhost:3000/api/me/sessions \\', `  -H "Authorization: ${bearerLine(accessToken)}"`],
+      sample: JSON.stringify(
+        {
+          totalResults: 1,
+          startIndex: 1,
+          count: 1,
+          sessions: [{id: '...', isCurrent: true, userAgent: '...', lastActiveIp: '203.0.113.24', participants: []}],
+        },
+        null,
+        2,
+      ),
+    })}
+    ${endpoint({
+      method: 'DELETE',
+      path: '/api/me/sessions/:sessionId',
+      summary: "Revokes one of the authenticated caller's sessions.",
+      protectedRoute: true,
+      curl: [
+        'curl -X DELETE http://localhost:3000/api/me/sessions/<session_id> \\',
+        `  -H "Authorization: ${bearerLine(accessToken)}"`,
+      ],
+      sample: '204 No Content',
+    })}
+    ${endpoint({
+      method: 'DELETE',
+      path: '/api/me/sessions?exceptCurrent=true',
+      summary: "Revokes every session except the one that issued the caller's token.",
+      protectedRoute: true,
+      curl: [
+        "curl -X DELETE 'http://localhost:3000/api/me/sessions?exceptCurrent=true' \\",
+        `  -H "Authorization: ${bearerLine(accessToken)}"`,
+      ],
+      sample: '204 No Content',
+    })}
 
     <div class="section-label">Postman</div>
     <div class="card">
@@ -391,6 +433,61 @@ app.patch('/api/me/credentials', requireBearer, async (req, res) => {
     res.status(error?.statusCode || 500).json({
       error: error?.code || 'CREDENTIAL_UPDATE_FAILED',
       message: error?.message || 'Failed to update credentials',
+    });
+  }
+});
+
+app.get('/api/me/sessions', requireBearer, async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.split(' ')[1];
+    const page = await getMeSessions({
+      baseUrl,
+      headers: {Authorization: `Bearer ${token}`},
+      limit: req.query.limit ? Number(req.query.limit) : undefined,
+      offset: req.query.offset ? Number(req.query.offset) : undefined,
+    });
+    res.json(page);
+  } catch (error) {
+    res.status(error?.statusCode || 500).json({
+      error: error?.code || 'SESSIONS_FETCH_FAILED',
+      message: error?.message || 'Failed to fetch sessions',
+    });
+  }
+});
+
+app.delete('/api/me/sessions/:sessionId', requireBearer, async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.split(' ')[1];
+    await revokeMeSession({
+      baseUrl,
+      headers: {Authorization: `Bearer ${token}`},
+      sessionId: req.params.sessionId,
+    });
+    res.status(204).end();
+  } catch (error) {
+    res.status(error?.statusCode || 500).json({
+      error: error?.code || 'SESSION_REVOKE_FAILED',
+      message: error?.message || 'Failed to revoke session',
+    });
+  }
+});
+
+app.delete('/api/me/sessions', requireBearer, async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.split(' ')[1];
+    await revokeMeSessions({
+      baseUrl,
+      exceptCurrent: req.query.exceptCurrent === 'true',
+      headers: {Authorization: `Bearer ${token}`},
+    });
+    res.status(204).end();
+  } catch (error) {
+    res.status(error?.statusCode || 500).json({
+      error: error?.code || 'SESSIONS_REVOKE_FAILED',
+      message: error?.message || 'Failed to revoke sessions',
     });
   }
 });

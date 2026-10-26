@@ -50,6 +50,40 @@
       }
     },
     {
+      "name": "Active sessions",
+      "request": {
+        "method": "GET",
+        "header": [{"key": "Authorization", "value": "Bearer {{accessToken}}"}],
+        "url": {"raw": "{{baseUrl}}/api/me/sessions", "host": ["{{baseUrl}}"], "path": ["api", "me", "sessions"]}
+      }
+    },
+    {
+      "name": "Revoke a session",
+      "request": {
+        "method": "DELETE",
+        "header": [{"key": "Authorization", "value": "Bearer {{accessToken}}"}],
+        "url": {
+          "raw": "{{baseUrl}}/api/me/sessions/:sessionId",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "me", "sessions", ":sessionId"],
+          "variable": [{"key": "sessionId", "value": ""}]
+        }
+      }
+    },
+    {
+      "name": "Revoke all other sessions",
+      "request": {
+        "method": "DELETE",
+        "header": [{"key": "Authorization", "value": "Bearer {{accessToken}}"}],
+        "url": {
+          "raw": "{{baseUrl}}/api/me/sessions?exceptCurrent=true",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "me", "sessions"],
+          "query": [{"key": "exceptCurrent", "value": "true"}]
+        }
+      }
+    },
+    {
       "name": "ThunderID userinfo (direct)",
       "request": {
         "method": "GET",

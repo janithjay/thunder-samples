@@ -1,5 +1,5 @@
 'use client'
-import { ChangeCredential, SignedIn, SignedOut, User, UserProfile } from '@thunderid/nextjs'
+import { ActiveSessions, ChangeCredential, SignedIn, SignedOut, User, UserProfile } from '@thunderid/nextjs'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState } from 'react'
@@ -34,7 +34,7 @@ function ShieldIcon() {
 const TABS = [
   { id: 'home', label: 'Home', icon: HomeIcon },
   { id: 'personal', label: 'Personal info', icon: PersonIcon },
-  { id: 'security', label: 'Security', icon: ShieldIcon },
+  { id: 'security', label: 'Login and Security', icon: ShieldIcon },
 ]
 
 const CREDENTIALS = [
@@ -93,8 +93,8 @@ const TILES = [
     id: 'security',
     icon: ShieldIcon,
     tone: 'green',
-    title: 'Security',
-    description: 'Password and other credentials',
+    title: 'Login and Security',
+    description: 'Credentials and active sessions',
   },
 ]
 
@@ -175,12 +175,13 @@ function AccountTabs() {
 
           {tab === 'security' && (
             <>
-              <h2 className="account-content-title">Security</h2>
-              <p className="account-content-subtitle">Manage your password and other credentials.</p>
+              <h2 className="account-content-title">Login and Security</h2>
+              <p className="account-content-subtitle">Manage your credentials and active sessions.</p>
               <div className="account-security-list">
                 {CREDENTIALS.map((credential) => (
                   <CredentialCard key={credential.attribute} {...credential} />
                 ))}
+                <ActiveSessions />
               </div>
             </>
           )}

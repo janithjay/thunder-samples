@@ -45,6 +45,13 @@ class MainActivity : ComponentActivity() {
             surfaceVariant = Color(0xFFF2F2F2),
             onSurfaceVariant = Color(0xFF49454F),
             outlineVariant = Color(0x1F1D1B20),
+            // The SDK's full-screen pages, cards and dialogs read these; left at Material3's
+            // baseline they carry its purple tint against the sample's own LightBg screens.
+            background = Color(0xFFF7F9FC),
+            surface = Color(0xFFF7F9FC),
+            surfaceContainerHigh = Color.White,
+            secondaryContainer = Color(0xFFE3ECF8),
+            onSecondaryContainer = Color(0xFF05213F),
         )
 
         setContent {

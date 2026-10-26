@@ -43,6 +43,12 @@ struct ProfileScreen: View {
                 // heading and labels follow that credential's own display name from the console.
                 ChangeCredential()
                     .padding(.horizontal, 20)
+                    .padding(.bottom, 24)
+
+                // ActiveSessions lists where the user is signed in, marks this device, and revokes
+                // any other session after a confirmation.
+                ActiveSessions()
+                    .padding(.horizontal, 20)
                     .padding(.bottom, 40)
             }
         }

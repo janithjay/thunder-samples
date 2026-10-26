@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.sp
 import dev.thunderid.android.R
 import dev.thunderid.compose.LocalThunderID
 import dev.thunderid.compose.components.actions.SignOutButton
+import dev.thunderid.compose.components.presentation.user.ActiveSessions
 import dev.thunderid.compose.components.presentation.user.ChangeCredential
 import dev.thunderid.compose.components.presentation.user.UserAvatar
 import dev.thunderid.compose.components.presentation.user.UserProfile
@@ -434,6 +435,10 @@ private fun ProfileScreen(onBack: () -> Unit) {
         )
 
         ChangeCredential(modifier = Modifier.fillMaxWidth())
+
+        Spacer(Modifier.height(8.dp))
+
+        ActiveSessions(modifier = Modifier.fillMaxWidth())
 
         Spacer(Modifier.height(40.dp))
     }

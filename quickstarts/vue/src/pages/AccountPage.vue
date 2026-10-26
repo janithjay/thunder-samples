@@ -1,11 +1,11 @@
 <script setup>
 import { ref } from 'vue'
-import { ChangeCredential, User, UserProfile } from '@thunderid/vue'
+import { ActiveSessions, ChangeCredential, User, UserProfile } from '@thunderid/vue'
 
 const TABS = [
   { id: 'home', label: 'Home' },
   { id: 'personal', label: 'Personal info' },
-  { id: 'security', label: 'Security' },
+  { id: 'security', label: 'Login and Security' },
 ]
 
 const TILES = [
@@ -18,8 +18,8 @@ const TILES = [
   {
     id: 'security',
     tone: 'green',
-    title: 'Security',
-    description: 'Password and other credentials',
+    title: 'Login and Security',
+    description: 'Credentials and active sessions',
   },
 ]
 
@@ -109,8 +109,8 @@ function closeCredential() {
         </template>
 
         <template v-else-if="tab === 'security'">
-          <h2 class="account-content-title">Security</h2>
-          <p class="account-content-subtitle">Manage your password and other credentials.</p>
+          <h2 class="account-content-title">Login and Security</h2>
+          <p class="account-content-subtitle">Manage your credentials and active sessions.</p>
           <div class="account-security-list">
             <div v-for="credential in CREDENTIALS" :key="credential.attribute" class="account-security-card">
               <div class="account-security-card-row">
@@ -138,6 +138,7 @@ function closeCredential() {
                 <ChangeCredential :attribute="credential.attribute" title="" @success="closeCredential" />
               </div>
             </div>
+            <ActiveSessions />
           </div>
         </template>
       </div>
